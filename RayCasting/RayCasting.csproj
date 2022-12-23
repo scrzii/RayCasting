@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net6.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="SceneObjects.txt" />
+    <None Remove="SceneObjects2.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="SceneObjects.txt" />
+    <EmbeddedResource Include="SceneObjects2.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="lib\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MatrixAlgo">
+      <HintPath>lib\MatrixAlgo.dll</HintPath>
+    </Reference>
+    <Reference Include="ScaledBitmapPainter">
+      <HintPath>lib\ScaledBitmapPainter.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
