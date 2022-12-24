@@ -1,9 +1,6 @@
-﻿using MatrixAlgo;
-using MatrixAlgo.Exceptions;
-using MatrixAlgo.Models;
+﻿using RayCasting.MathModels;
 using ScaledBitmapPainter;
 using System.Numerics;
-using System.Xml.Serialization;
 
 namespace RayCasting;
 
@@ -17,7 +14,9 @@ internal class Scene
     private readonly Vector3 _verticalAxe;
     private readonly Vector3 _stepLeftDirection;
 
-    private const float _screenDistance = 1;
+    private const float ScreenDistance = 1;
+    private const float RotationAngle = -(float)Math.PI / 1000;
+    private const float Step = 0.5f;
 
     public Scene()
     {
@@ -31,22 +30,25 @@ internal class Scene
 
     public void StepForward()
     {
-        _camera += _direction;
+        _camera += _direction * Step;
     }
 
     public void StepBackward()
     {
-        _camera -= _direction;
+        _camera -= _direction * Step;
     }
 
-    public void StepLeft()
+    public void RotateX(int delta)
     {
-        _camera += _stepLeftDirection;
+        _direction = RotateAroundZ(_direction, RotationAngle * delta);
     }
 
-    public void StepRight()
+    public void RotateY(int delta)
     {
-        _camera -= _stepLeftDirection;
+        var xyAngle = (float)Math.Atan2(_direction.Y, _direction.X);
+        _direction = RotateAroundZ(_direction, -xyAngle);
+        _direction = RotateAroundY(_direction, RotationAngle * delta);
+        _direction = RotateAroundZ(_direction, xyAngle);
     }
 
     public void StepUp()
@@ -59,24 +61,66 @@ internal class Scene
         _camera -= _verticalAxe;
     }
 
+    public void StepLeft()
+    {
+        var _leftDirection = -Vector3.Normalize(Vector3.Cross(_verticalAxe, _direction));
+        _camera += _leftDirection * Step;
+    }
+
+    public void StepRight()
+    {
+        var _leftDirection = -Vector3.Normalize(Vector3.Cross(_verticalAxe, _direction));
+        _camera -= _leftDirection * Step;
+    }
+
+    private Vector3 RotateAroundX(Vector3 vector, float angle)
+    {
+        var sin = (float)Math.Sin(angle);
+        var cos = (float)Math.Cos(angle);
+        return new Vector3(
+            vector.X,
+            vector.Y * cos - vector.Z * sin,
+            vector.Y * sin + vector.Z * cos);
+    }
+
+    private Vector3 RotateAroundY(Vector3 vector, float angle)
+    {
+        var sin = (float)Math.Sin(angle);
+        var cos = (float)Math.Cos(angle);
+        return new Vector3(
+            vector.X * cos + vector.Z * sin,
+            vector.Y,
+            vector.Z * cos - vector.X * sin);
+    }
+
+    private Vector3 RotateAroundZ(Vector3 vector, float angle)
+    {
+        var sin = (float)Math.Sin(angle);
+        var cos = (float)Math.Cos(angle);
+        return new Vector3(
+            vector.X * cos - vector.Y * sin,
+            vector.X * sin + vector.Y * cos,
+            vector.Z);
+    }
+
     public Bitmap Render(int width, int height)
     {
         var result = UnsafeBitmapController.Create(width, height);
 
         var leftDirection = Vector3.Normalize(Vector3.Cross(_verticalAxe, _direction));
         var topDirection = Vector3.Normalize(Vector3.Cross(leftDirection, _direction));
-        var startPoint = _camera + Vector3.Normalize(_direction) * _screenDistance - leftDirection * _screenWidth / 2 - topDirection * _screenWidth / 2;
-        
+        var startPoint = _camera + Vector3.Normalize(_direction) * ScreenDistance - leftDirection * _screenWidth / 2 - topDirection * _screenWidth / 2;
+
         result.Lock();
 
-        for (int x = 0; x < width; x++)
+        Parallel.For(0, width, x =>
         {
             for (int y = 0; y < height; y++)
             {
                 var color = GetPixelColor(_camera, startPoint + leftDirection * x / width * _screenWidth + topDirection * y / height * _screenWidth);
                 result.SetPixel(x, y, color);
             }
-        }
+        });
 
         result.Unlock();
 
@@ -95,15 +139,12 @@ internal class Scene
 
     private double GetIntersectionDistance(Vector3 rayStart, Vector3 rayEnd, Polygon3 triangle)
     {
-        Vector3 intersectionPoint;
-        try
-        {
-            intersectionPoint = GetIntersectionPoint(rayStart, rayEnd, triangle);
-        }
-        catch (InvalidSolutionException)
+        var intersectionResult = GetIntersectionResult(rayStart, rayEnd, triangle);
+        if (!intersectionResult.Success)
         {
             return -1;
         }
+        var intersectionPoint = new Vector3(intersectionResult.Values);
 
         if (Vector3.Dot(rayEnd - rayStart, intersectionPoint - rayStart) < 0)
         {
@@ -118,7 +159,7 @@ internal class Scene
         return (intersectionPoint - rayStart).Length();
     }
 
-    private Vector3 GetIntersectionPoint(Vector3 rayStart, Vector3 rayEnd, Polygon3 triangle)
+    private CramersMethod3x3Result GetIntersectionResult(Vector3 rayStart, Vector3 rayEnd, Polygon3 triangle)
     {
         var a = triangle.Vecrtices[0];
         var b = triangle.Vecrtices[1];
@@ -132,12 +173,20 @@ internal class Scene
         var beta = p.Z * q.X - p.X * q.Z;
         var gamma = p.X * q.Y - p.Y * q.X;
 
-        var matrix = new SuplementedMatrix(3, 3);
-        matrix.SetRow(new SuplementedMatrixRow(new double[] { alpha, beta, gamma }, a.X * alpha + a.Y * beta + a.Z * gamma), 0);
-        matrix.SetRow(new SuplementedMatrixRow(new double[] { 0, -r.Z, r.Y }, r.Y * rayStart.Z - r.Z * rayStart.Y), 1);
-        matrix.SetRow(new SuplementedMatrixRow(new double[] { r.Z, 0, -r.X }, r.Z * rayStart.X - r.X * rayStart.Z), 2);
-
-        return new Vector3(GaussMethod.Solve(matrix).Select(x => (float)x).ToArray());
+        var matrix = new float[,]
+        {
+            { alpha, beta, gamma },
+            { 0, -r.Z, r.Y },
+            { r.Z, 0, -r.X }
+        };
+        var freeMembers = new float[]
+        {
+            a.X * alpha + a.Y * beta + a.Z * gamma,
+            r.Y * rayStart.Z - r.Z * rayStart.Y,
+            r.Z * rayStart.X - r.X * rayStart.Z
+        };
+        var model = new CramersMethod3x3(matrix, freeMembers);
+        return model.Solve();
     }
 
     private bool IsPointInTriangle(Vector3 target, Vector3 a, Vector3 b, Vector3 c)
