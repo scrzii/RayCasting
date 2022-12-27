@@ -4,12 +4,12 @@ namespace RayCasting;
 
 internal class Polygon3
 {
-    public Vector3[] Vecrtices { get; set; }
+    public Vector3[] Vertices { get; set; }
     public Color PolygonColor { get; set; }
 
     private Polygon3()
     {
-        Vecrtices = new Vector3[3];
+        Vertices = new Vector3[3];
     }
 
     public static Polygon3[] ParsePolygons(string data)
@@ -29,7 +29,7 @@ internal class Polygon3
         var result = new Polygon3();
         for (int i = 0; i < 3; i++)
         {
-            result.Vecrtices[i] = ParseVector(lines[startIndex + i]);
+            result.Vertices[i] = ParseVector(lines[startIndex + i]);
         }
         result.PolygonColor = ParseColor(lines[startIndex + 3]);
 

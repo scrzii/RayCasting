@@ -1,4 +1,5 @@
-﻿using RayCasting.MathModels;
+﻿using RayCasting.Extenstions;
+using RayCasting.MathModels;
 using ScaledBitmapPainter;
 using System.Numerics;
 
@@ -40,15 +41,15 @@ internal class Scene
 
     public void RotateX(int delta)
     {
-        _direction = RotateAroundZ(_direction, RotationAngle * delta);
+        _direction = _direction.RotateAroundZ(RotationAngle * delta);
     }
 
     public void RotateY(int delta)
     {
         var xyAngle = (float)Math.Atan2(_direction.Y, _direction.X);
-        _direction = RotateAroundZ(_direction, -xyAngle);
-        _direction = RotateAroundY(_direction, RotationAngle * delta);
-        _direction = RotateAroundZ(_direction, xyAngle);
+        _direction = _direction.RotateAroundZ(-xyAngle);
+        _direction = _direction.RotateAroundY(RotationAngle * delta);
+        _direction = _direction.RotateAroundZ(xyAngle);
     }
 
     public void StepUp()
@@ -73,36 +74,6 @@ internal class Scene
         _camera -= _leftDirection * Step;
     }
 
-    private Vector3 RotateAroundX(Vector3 vector, float angle)
-    {
-        var sin = (float)Math.Sin(angle);
-        var cos = (float)Math.Cos(angle);
-        return new Vector3(
-            vector.X,
-            vector.Y * cos - vector.Z * sin,
-            vector.Y * sin + vector.Z * cos);
-    }
-
-    private Vector3 RotateAroundY(Vector3 vector, float angle)
-    {
-        var sin = (float)Math.Sin(angle);
-        var cos = (float)Math.Cos(angle);
-        return new Vector3(
-            vector.X * cos + vector.Z * sin,
-            vector.Y,
-            vector.Z * cos - vector.X * sin);
-    }
-
-    private Vector3 RotateAroundZ(Vector3 vector, float angle)
-    {
-        var sin = (float)Math.Sin(angle);
-        var cos = (float)Math.Cos(angle);
-        return new Vector3(
-            vector.X * cos - vector.Y * sin,
-            vector.X * sin + vector.Y * cos,
-            vector.Z);
-    }
-
     public Bitmap Render(int width, int height)
     {
         var result = UnsafeBitmapController.Create(width, height);
@@ -113,87 +84,46 @@ internal class Scene
 
         result.Lock();
 
-        Parallel.For(0, width, x =>
-        {
-            for (int y = 0; y < height; y++)
-            {
-                var color = GetPixelColor(_camera, startPoint + leftDirection * x / width * _screenWidth + topDirection * y / height * _screenWidth);
-                result.SetPixel(x, y, color);
-            }
-        });
+        FillParallel(result, width, height, startPoint, leftDirection, topDirection);
 
         result.Unlock();
 
         return result.GetBitmap();
     }
 
-    private Color GetPixelColor(Vector3 rayStart, Vector3 rayEnd)
+    private void FillSync(UnsafeBitmapController bitmap, int width, int height, Vector3 startPoint, Vector3 leftDirection, Vector3 topDirection)
     {
-        var distances = _polygons.Select(x => (x, GetIntersectionDistance(rayStart, rayEnd, x))).Where(x => x.Item2 > 0);
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                var pixelPosition = startPoint + leftDirection * x / width * _screenWidth + topDirection * y / height * _screenWidth;
+                var color = GetPixelColor(pixelPosition);
+                bitmap.SetPixel(x, y, color);
+            }
+        }
+    }
+
+    private void FillParallel(UnsafeBitmapController bitmap, int width, int height, Vector3 startPoint, Vector3 leftDirection, Vector3 topDirection)
+    {
+        Parallel.For(0, width, x =>
+        {
+            for (int y = 0; y < height; y++)
+            {
+                var pixelPosition = startPoint + leftDirection * x / width * _screenWidth + topDirection * y / height * _screenWidth;
+                var color = GetPixelColor(pixelPosition);
+                bitmap.SetPixel(x, y, color);
+            }
+        });
+    }
+
+    private Color GetPixelColor(Vector3 rayEnd)
+    {
+        var distances = _polygons.Select(x => (x, Geometry.GetIntersectionDistance(_camera, rayEnd, x))).Where(x => x.Item2 > 0).ToArray();
         if (!distances.Any())
         {
             return Color.Black;
         }
         return distances.MinBy(x => x.Item2).x.PolygonColor;
-    }
-
-    private double GetIntersectionDistance(Vector3 rayStart, Vector3 rayEnd, Polygon3 triangle)
-    {
-        var intersectionResult = GetIntersectionResult(rayStart, rayEnd, triangle);
-        if (!intersectionResult.Success)
-        {
-            return -1;
-        }
-        var intersectionPoint = new Vector3(intersectionResult.Values);
-
-        if (Vector3.Dot(rayEnd - rayStart, intersectionPoint - rayStart) < 0)
-        {
-            return -1;
-        }
-
-        if (!IsPointInTriangle(intersectionPoint, triangle.Vecrtices[0], triangle.Vecrtices[1], triangle.Vecrtices[2]))
-        {
-            return -1;
-        }
-
-        return (intersectionPoint - rayStart).Length();
-    }
-
-    private CramersMethod3x3Result GetIntersectionResult(Vector3 rayStart, Vector3 rayEnd, Polygon3 triangle)
-    {
-        var a = triangle.Vecrtices[0];
-        var b = triangle.Vecrtices[1];
-        var c = triangle.Vecrtices[2];
-
-        var p = b - a;
-        var q = c - a;
-        var r = rayEnd - rayStart;
-
-        var alpha = p.Y * q.Z - p.Z * q.Y;
-        var beta = p.Z * q.X - p.X * q.Z;
-        var gamma = p.X * q.Y - p.Y * q.X;
-
-        var matrix = new float[,]
-        {
-            { alpha, beta, gamma },
-            { 0, -r.Z, r.Y },
-            { r.Z, 0, -r.X }
-        };
-        var freeMembers = new float[]
-        {
-            a.X * alpha + a.Y * beta + a.Z * gamma,
-            r.Y * rayStart.Z - r.Z * rayStart.Y,
-            r.Z * rayStart.X - r.X * rayStart.Z
-        };
-        var model = new CramersMethod3x3(matrix, freeMembers);
-        return model.Solve();
-    }
-
-    private bool IsPointInTriangle(Vector3 target, Vector3 a, Vector3 b, Vector3 c)
-    {
-        return
-            Vector3.Dot(Vector3.Cross(c - a, target - a), Vector3.Cross(target - a, b - a)) > 0
-            && Vector3.Dot(Vector3.Cross(a - b, target - b), Vector3.Cross(target - b, c - b)) > 0
-            && Vector3.Dot(Vector3.Cross(a - c, target - c), Vector3.Cross(target - c, b - c)) > 0;
     }
 }
