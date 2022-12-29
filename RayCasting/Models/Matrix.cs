@@ -1,6 +1,6 @@
 ﻿using System.Numerics;
 
-namespace RayCasting.MathModels;
+namespace RayCasting.Models;
 
 internal class Matrix
 {

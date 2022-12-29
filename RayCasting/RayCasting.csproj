@@ -10,12 +10,12 @@
 
   <ItemGroup>
     <None Remove="SceneObjects.txt" />
-    <None Remove="SceneObjects2.txt" />
+    <None Remove="SceneObjects1.txt" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="SceneObjects.txt" />
-    <EmbeddedResource Include="SceneObjects2.txt" />
+    <EmbeddedResource Include="SceneObjects1.txt" />
   </ItemGroup>
 
   <ItemGroup>

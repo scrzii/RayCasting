@@ -1,9 +1,9 @@
 ﻿using RayCasting.Extenstions;
-using RayCasting.MathModels;
+using RayCasting.Models;
 using ScaledBitmapPainter;
 using System.Numerics;
 
-namespace RayCasting;
+namespace RayCasting.Services;
 
 internal class Scene
 {
@@ -12,18 +12,19 @@ internal class Scene
     private Polygon3[] _polygons;
 
     private readonly float _screenWidth;
+    private float _lastScreenHeight;
     private readonly Vector3 _verticalAxe;
     private readonly Vector3 _stepLeftDirection;
 
     private const float ScreenDistance = 1;
     private const float RotationAngle = -(float)Math.PI / 1000;
-    private const float Step = 0.5f;
+    private const float Step = 0.1f;
 
     public Scene()
     {
         _camera = new Vector3(-5, 0, 0);
         _direction = new Vector3(1, 0, 0);
-        _polygons = Polygon3.ParsePolygons(EmbeddedResourceManager.GetFileData(EmbeddedResourceManager.SceneObjects));
+        _polygons = TriangleParser.ParsePolygons(EmbeddedResourceManager.SceneObjects);
         _screenWidth = 1;
         _verticalAxe = new Vector3(0, 0, 1);
         _stepLeftDirection = Vector3.Normalize(Vector3.Cross(_direction, _verticalAxe));
@@ -41,15 +42,15 @@ internal class Scene
 
     public void RotateX(int delta)
     {
-        _direction = _direction.RotateAroundZ(RotationAngle * delta);
+        _direction = _direction.RotateAroundZ(RotationAngle * -delta);
     }
 
     public void RotateY(int delta)
     {
         var xyAngle = (float)Math.Atan2(_direction.Y, _direction.X);
-        _direction = _direction.RotateAroundZ(-xyAngle);
-        _direction = _direction.RotateAroundY(RotationAngle * delta);
         _direction = _direction.RotateAroundZ(xyAngle);
+        _direction = _direction.RotateAroundY(RotationAngle * -delta);
+        _direction = _direction.RotateAroundZ(-xyAngle);
     }
 
     public void StepUp()
@@ -80,11 +81,16 @@ internal class Scene
 
         var leftDirection = Vector3.Normalize(Vector3.Cross(_verticalAxe, _direction));
         var topDirection = Vector3.Normalize(Vector3.Cross(leftDirection, _direction));
-        var startPoint = _camera + Vector3.Normalize(_direction) * ScreenDistance - leftDirection * _screenWidth / 2 - topDirection * _screenWidth / 2;
+        _lastScreenHeight = (float)height / width * _screenWidth;
+        var startPoint = _camera + Vector3.Normalize(_direction) * ScreenDistance - leftDirection * _screenWidth / 2 - topDirection * _lastScreenHeight / 2;
 
         result.Lock();
 
+#if DEBUG
+        FillSync(result, width, height, startPoint, leftDirection, topDirection);
+#else
         FillParallel(result, width, height, startPoint, leftDirection, topDirection);
+#endif
 
         result.Unlock();
 
@@ -97,7 +103,7 @@ internal class Scene
         {
             for (int y = 0; y < height; y++)
             {
-                var pixelPosition = startPoint + leftDirection * x / width * _screenWidth + topDirection * y / height * _screenWidth;
+                var pixelPosition = startPoint + leftDirection * x / width * _screenWidth + topDirection * y / height * _lastScreenHeight;
                 var color = GetPixelColor(pixelPosition);
                 bitmap.SetPixel(x, y, color);
             }
@@ -110,7 +116,7 @@ internal class Scene
         {
             for (int y = 0; y < height; y++)
             {
-                var pixelPosition = startPoint + leftDirection * x / width * _screenWidth + topDirection * y / height * _screenWidth;
+                var pixelPosition = startPoint + leftDirection * x / width * _screenWidth + topDirection * y / height * _lastScreenHeight;
                 var color = GetPixelColor(pixelPosition);
                 bitmap.SetPixel(x, y, color);
             }
@@ -119,7 +125,7 @@ internal class Scene
 
     private Color GetPixelColor(Vector3 rayEnd)
     {
-        var distances = _polygons.Select(x => (x, Geometry.GetIntersectionDistance(_camera, rayEnd, x))).Where(x => x.Item2 > 0).ToArray();
+        var distances = _polygons.Select(x => (x, x.GetIntersectionDistance(_camera, rayEnd))).Where(x => x.Item2 > 0).ToArray();
         if (!distances.Any())
         {
             return Color.Black;

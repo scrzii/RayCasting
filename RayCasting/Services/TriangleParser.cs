@@ -1,22 +1,16 @@
-﻿using System.Numerics;
+﻿using RayCasting.Extenstions;
+using RayCasting.Models;
+using System.Numerics;
 
-namespace RayCasting;
+namespace RayCasting.Services;
 
-internal class Polygon3
+internal class TriangleParser
 {
-    public Vector3[] Vertices { get; set; }
-    public Color PolygonColor { get; set; }
-
-    private Polygon3()
-    {
-        Vertices = new Vector3[3];
-    }
-
     public static Polygon3[] ParsePolygons(string data)
     {
         var lines = data.Split(Environment.NewLine, StringSplitOptions.None);
         var result = new List<Polygon3>();
-        for (int i = 0; i < lines.Length; i += 4) 
+        for (int i = 0; i < lines.Length; i += 4)
         {
             result.Add(ParsePolygon(lines, i));
         }
@@ -26,11 +20,13 @@ internal class Polygon3
 
     public static Polygon3 ParsePolygon(string[] lines, int startIndex)
     {
-        var result = new Polygon3();
+        var vertices = new Vector3[3];
         for (int i = 0; i < 3; i++)
         {
-            result.Vertices[i] = ParseVector(lines[startIndex + i]);
+            vertices[i] = ParseVector(lines[startIndex + i]);
+            vertices[i] = vertices[i].RotateAroundZ((float)Math.PI / 18);
         }
+        var result = new Polygon3(vertices);
         result.PolygonColor = ParseColor(lines[startIndex + 3]);
 
         return result;

@@ -1,10 +1,13 @@
 ﻿using System.Reflection;
 
-namespace RayCasting;
+namespace RayCasting.Services;
 
 internal class EmbeddedResourceManager
 {
-    public const string SceneObjects = @"SceneObjects.txt";
+    public static string SceneObjects 
+    {
+        get => GetFileData(@"SceneObjects.txt");
+    }
 
     public static string GetFileData(string filename)
     {
