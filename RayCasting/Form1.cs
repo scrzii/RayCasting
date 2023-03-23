@@ -1,18 +1,30 @@
+using RayCasting.Core;
 using RayCasting.Services;
-using System.Runtime.CompilerServices;
+using ScaledBitmapPainter;
+using System.Numerics;
 
 namespace RayCasting;
 
 public partial class Form1 : Form
 {
-    private Scene _scene;
+    private Projector _scene;
+    private CameraControl _control;
+    private Camera _camera;
+    private ImageChartTransformer _transformer;
     private Point? _center = null;
     private bool _cliped = false;
+
+    private const float VerticalStep = 1;
+    private const float HorizontalStep = 0.1f;
+    private const float RotationAngle = (float)Math.PI / 1000;
 
     public Form1()
     {
         InitializeComponent();
-        _scene = new Scene();
+        _camera = new Camera(new Vector3(-5, 0, 0), Vector3.UnitX, panel1.Size);
+        _control = new CameraControl(_camera);
+        _scene = new Projector(_camera, panel1.Size);
+        _scene.AddPolygons(TriangleParser.ParsePolygons(EmbeddedResourceManager.SceneObjects));
     }
 
     private void panel1_Paint(object sender, PaintEventArgs e)
@@ -27,17 +39,17 @@ public partial class Form1 : Form
         switch (e.KeyCode)
         {
             case Keys.W:
-                _scene.StepForward(); break;
+                _control.StepByDirection(HorizontalStep); break;
             case Keys.S:
-                _scene.StepBackward(); break;
+                _control.StepByDirection(-HorizontalStep); break;
             case Keys.A:
-                _scene.StepLeft(); break;
+                _control.StepHorizontal(-HorizontalStep); break;
             case Keys.D:
-                _scene.StepRight(); break;
+                _control.StepHorizontal(HorizontalStep); break;
             case Keys.Space:
-                _scene.StepUp(); break;
+                _control.StepVertical(VerticalStep); break;
             case Keys.ShiftKey:
-                _scene.StepDown(); break;
+                _control.StepVertical(-VerticalStep); break;
             case Keys.Escape:
                 Unclip();
                 break;
@@ -65,17 +77,15 @@ public partial class Form1 : Form
         {
             return;
         }
-        if (_center is null)
-        {
-            _center = e.Location;
-        }
+
+        _center ??= e.Location;
 
         Cursor.Position = new Point(Left + panel1.Left + panel1.Width / 2, Top + panel1.Top + panel1.Height / 2);
 
         var deltaX = _center.Value.X - e.X;
         var deltaY = _center.Value.Y - e.Y;
-        _scene.RotateX(deltaX);
-        _scene.RotateY(deltaY);
+        _control.RotateX(-RotationAngle * deltaX);
+        _control.RotateY(RotationAngle * deltaY);
         panel1.Invalidate();
     }
 
@@ -86,7 +96,8 @@ public partial class Form1 : Form
 
     private void Form1_Resize(object sender, EventArgs e)
     {
-        panel1.Width = Width;
-        panel1.Height = Height;
+        panel1.Size = Size;
+        _scene.SetRenderSize(panel1.Size);
+        _camera.SetSize(panel1.Size);
     }
 }

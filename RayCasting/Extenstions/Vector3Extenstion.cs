@@ -58,4 +58,9 @@ internal static class Vector3Extenstion
             -vector.X * sin + vector.Y * cos,
             vector.Z);
     }
+
+    public static Vector3 Normalize(this Vector3 vector)
+    {
+        return Vector3.Normalize(vector);
+    }
 }
